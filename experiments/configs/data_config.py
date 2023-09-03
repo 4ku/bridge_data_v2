@@ -27,12 +27,12 @@ def get_config(config_string):
             {
                 "include": [
                     [
-                        "icra/?*/?*/?*",
-                        "flap/?*/?*/?*",
-                        "bridge_data_v1/berkeley/?*/?*",
-                        "rss/?*/?*/?*",
+                        # "icra/?*/?*/?*",
+                        # "flap/?*/?*/?*",
+                        # "bridge_data_v1/berkeley/?*/?*",
+                        # "rss/?*/?*/?*",
                         "bridge_data_v2/?*/?*/?*",
-                        "scripted/?*",
+                        # "scripted/?*",
                     ]
                 ],
                 "exclude": [],

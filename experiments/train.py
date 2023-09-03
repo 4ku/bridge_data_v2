@@ -1,4 +1,3 @@
-from functools import partial
 from jaxrl_m.common.wandb import WandBLogger
 from jaxrl_m.common.common import shard_batch
 from jaxrl_m.data.bridge_dataset import BridgeDataset, glob_to_path_list
@@ -112,7 +111,11 @@ def main(_):
     )
     train_data_iter = train_data.get_iterator()
 
+    # Batch is a dict with keys:
+    # frozen_dict_keys(['observations', 'next_observations', 'actions', 'terminals', 'truncates', 'goals', 'rewards', 'masks'])
     example_batch = next(train_data_iter)
+    logging.info(f"Observation shape: {example_batch['observations']['image'].shape}")
+    logging.info(f"Goal shape: {example_batch['goals']['image'].shape}")
     logging.info(f"Batch size: {example_batch['observations']['image'].shape[0]}")
     logging.info(f"Number of devices: {num_devices}")
     logging.info(
@@ -148,7 +151,12 @@ def main(_):
         timer.tick("total")
 
         timer.tick("dataset")
-        batch = shard_batch(next(train_data_iter), sharding)
+        try:
+            batch = shard_batch(next(train_data_iter), sharding)
+        except Exception as e:
+            logging.warning(e)
+            logging.warning("Corrupted record encountered. Skipping.")
+            continue
         timer.tock("dataset")
 
         timer.tick("train")
@@ -159,11 +167,26 @@ def main(_):
             logging.info("Evaluating...")
             timer.tick("val")
             metrics = []
-            for batch in val_data.get_iterator():
+            val_iterator = val_data.get_iterator()
+            
+            while True:
+                try:
+                    batch = next(val_iterator)
+                except StopIteration:
+                    # No more items to iterate; break the loop
+                    break
+                except Exception as e:
+                    logging.warning(e)
+                    logging.warning("Corrupted record encountered. Skipping.")
+                    continue  # Skip this iteration and continue with the next batch
+
+                # If you reach here, you have a valid batch; process it
                 rng, val_rng = jax.random.split(rng)
                 metrics.append(agent.get_debug_metrics(batch, seed=val_rng))
-            metrics = jax.tree_map(lambda *xs: np.mean(xs), *metrics)
-            wandb_logger.log({"validation": metrics}, step=i)
+            
+            if len(metrics) > 0:
+                metrics = jax.tree_map(lambda *xs: np.mean(xs), *metrics)
+                wandb_logger.log({"validation": metrics}, step=i)
             timer.tock("val")
 
         if (i + 1) % FLAGS.config.save_interval == 0:

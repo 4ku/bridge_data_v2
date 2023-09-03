@@ -4,12 +4,12 @@ from ml_collections import ConfigDict
 def get_config(config_string):
     base_real_config = dict(
         batch_size=256,
-        num_steps=int(2e6),
+        num_steps=50_000,
         log_interval=100,
-        eval_interval=5000,
-        save_interval=5000,
-        save_dir="path/to/save/dir",
-        data_path="path/to/data",
+        eval_interval=500,
+        save_interval=500,
+        save_dir="data/bridge_results",
+        data_path="data/bridge_tfrecord",
         resume_path=None,
         seed=42,
     )
@@ -101,7 +101,7 @@ def get_config(config_string):
                     relabel_actions=True,
                     **base_data_config,
                 ),
-                encoder="resnetv1-34-bridge",
+                encoder="resnetv1-18-bridge",
                 encoder_kwargs=dict(
                     pooling_method="avg",
                     add_spatial_coordinates=True,

@@ -50,6 +50,17 @@ def uniform(traj, *, reached_proportion):
         traj["next_observations"],
     )
 
+    # Add next_goals
+    # shift goal_idxs by 1 to get next goals
+    next_goal_idxs = goal_idxs + 1
+    next_goal_idxs = tf.minimum(next_goal_idxs, traj_len - 1)  # Prevent out-of-bounds index
+
+    # select next goals based on next_goal_idxs
+    traj["next_goals"] = tf.nest.map_structure(
+        lambda x: tf.gather(x, next_goal_idxs),
+        traj["next_observations"],
+    )
+    
     # reward is 0 for goal-reaching transitions, -1 otherwise
     traj["rewards"] = tf.cast(tf.where(goal_reached_mask, 0, -1), tf.int32)
 
@@ -99,6 +110,16 @@ def last_state_upweighted(traj, *, reached_proportion):
         traj["next_observations"],
     )
 
+    # Add next_goals
+    next_goal_idxs = indices + 1
+    next_goal_idxs = tf.minimum(next_goal_idxs, traj_len - 1)  # Prevent out-of-bounds index
+
+    # select next goals based on next_goal_idxs
+    traj["next_goals"] = tf.nest.map_structure(
+        lambda x: tf.gather(x, next_goal_idxs),
+        traj["next_observations"],
+    )
+    
     # reward is 0 for goal-reaching transitions, -1 otherwise
     traj["rewards"] = tf.cast(tf.where(goal_reached_mask, 0, -1), tf.int32)
 
@@ -143,6 +164,17 @@ def geometric(traj, *, reached_proportion, discount):
     # select goals
     traj["goals"] = tf.nest.map_structure(
         lambda x: tf.gather(x, goal_idxs),
+        traj["next_observations"],
+    )
+
+    # Add next_goals
+    # shift goal_idxs by 1 to get next goals
+    next_goal_idxs = goal_idxs + 1
+    next_goal_idxs = tf.minimum(next_goal_idxs, traj_len - 1)  # Prevent out-of-bounds index
+
+    # select next goals based on next_goal_idxs
+    traj["next_goals"] = tf.nest.map_structure(
+        lambda x: tf.gather(x, next_goal_idxs),
         traj["next_observations"],
     )
 
