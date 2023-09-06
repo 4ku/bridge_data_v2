@@ -1,64 +1,9 @@
 # Jax BC/RL Implementations for BridgeData V2
+This repository provides code for training on BridgeData V2 dataset.
 
-This repository provides code for training on [BridgeData V2](https://rail-berkeley.github.io/bridgedata/).
+This code is forked from [rail-berkeley/bridge_data_v2](https://github.com/rail-berkeley/bridge_data_v2). So for more detailes go in that repo.
 
-We provide implementations for the following subset of methods described in the paper:
-
-- Goal-conditioned BC
-- Goal-conditioned BC with a diffusion policy 
-- Goal-condtioned IQL
-- Goal-conditioned contrastive RL 
-
-The code for the language-conditioned BC method may be released soon.
-
-The official implementations and papers for all the methods can be found here:
-- [IQDL](https://github.com/philippe-eecs/IDQL) (IQL + diffusion policy) [[Hansen-Estruch et al.](https://github.com/philippe-eecs/IDQL)] and [Diffusion Policy](https://diffusion-policy.cs.columbia.edu/) [[Chi et al.](https://diffusion-policy.cs.columbia.edu/)]
-- [IQL](https://github.com/ikostrikov/implicit_q_learning) [[Kostrikov et al.](https://arxiv.org/abs/2110.06169)]
-- [Contrastive RL](https://chongyi-zheng.github.io/stable_contrastive_rl/) [[Zheng et al.](https://arxiv.org/abs/2306.03346), [Eysenbach et al.](https://arxiv.org/abs/2206.07568)]
-- [RT-1](https://github.com/google-research/robotics_transformer) [[Brohan et al.](https://arxiv.org/abs/2212.06817)]
-- [ACT](https://github.com/tonyzhaozh/act) [[Zhao et al.](https://arxiv.org/abs/2304.13705)]
-
-Please open a GitHub issue if you encounter problems with this code. 
-
-## Data 
-
-The raw dataset (comprised of JPEGs, PNGs, and pkl files) can be downloaded from the [website](https://rail-berkeley.github.io/bridgedata/). For training, the raw data needs to be converted into a TFRecord format that is compatible with the data loader. First, use `data_processing/bridgedata_raw_to_numpy.py` to convert the raw data into numpy files. Then, use `data_processing/bridgedata_numpy_to_tfrecord.py` to convert the numpy files into TFRecord files. 
-
-## Training
-
-To start training run the command below. Replace `METHOD` with one of `gc_bc`, `gc_ddpm_bc`, `gc_iql`, or `contrastive_rl_td`, and replace `NAME` with a name for the run. 
-
-```
-python experiments/train.py \
-    --config experiments/configs/train_config.py:METHOD \
-    --bridgedata_config experiments/configs/data_config.py:all \
-    --name NAME
-```
-
-Training hyperparameters can be modified in `experiments/configs/data_config.py` and data parameters (e.g. subsets to include/exclude) can be modified in `experiments/configs/train_config.py`. 
-
-## Evaluation
-
-First, set up the robot hardware according to our [guide](https://docs.google.com/document/d/1si-6cTElTWTgflwcZRPfgHU7-UwfCUkEztkH3ge5CGc/edit?usp=sharing). Install our WidowX robot controller stack from [this repo](https://github.com/rail-berkeley/bridge_data_robot). Then, run the command:
-
-```
-python experiments/eval.py \
-    --num_timesteps NUM_TIMESTEPS \
-    --video_save_path VIDEO_DIR \
-    --checkpoint_path CHECKPOINT_PATH \
-    --wandb_run_name WANDB_RUN_NAME \
-    --blocking
-```
-
-The script loads some information about the checkpoint from its corresponding WandB run.
-
-## Provided Checkpoints
-
-Checkpoints for GCBC, D-GCBC, GCIQL, CRL, and RT-1 are available [here](https://rail.eecs.berkeley.edu/datasets/bridge_release/checkpoints/). Each checkpoint (except RT-1) has an associated JSON file with its configuration information. To evaluate these checkpoints with the above evaluation script, modify the references to the wandb run configuration to use the dictionary provided in the JSON file instead.
-
-An evaluation script for the RT-1 checkpoint is available in this separate repo (TODO).
-
-We don't currently have checkpoints for ACT or LCBC available but may release them soon. 
+Added implementation of language-conditioned behavioral cloning.
 
 ## Environment
 
@@ -81,17 +26,78 @@ pip install --upgrade "jax[tpu]==0.4.13" -f https://storage.googleapis.com/jax-r
 ```
 See the [Jax Github page](https://github.com/google/jax) for more details on installing Jax. 
 
-## Cite
+## Training
 
-This code is based on [dibyaghosh/jaxrl_m](https://github.com/dibyaghosh/jaxrl_m).
-
-If you use this code and/or BridgeData V2 in your work, please cite the paper with:
+To start training run the command below. Replace `METHOD` with one of `gc_bc`, `gc_ddpm_bc`, `gc_iql`, or `contrastive_rl_td`, and replace `NAME` with a name for the run. 
 
 ```
-@inproceedings{walke2023bridgedata,
-  title={BridgeData V2: A Dataset for Robot Learning at Scale},
-  author={Walke, Homer and Black, Kevin and Lee, Abraham and Kim, Moo Jin and Du, Max and Zheng, Chongyi and Zhao, Tony and Hansen-Estruch, Philippe and Vuong, Quan and He, Andre and Myers, Vivek and Fang, Kuan and Finn, Chelsea and Levine, Sergey},
-  booktitle={Conference on Robot Learning (CoRL)},
-  year={2023}
-}
+python experiments/train.py \
+    --config experiments/configs/train_config.py:METHOD \
+    --bridgedata_config experiments/configs/data_config.py:all \
+    --name NAME
 ```
+
+Training hyperparameters can be modified in `experiments/configs/data_config.py` and data parameters (e.g. subsets to include/exclude) can be modified in `experiments/configs/train_config.py`. 
+
+## Experiments and Results
+
+### Dataset Configurations
+
+Three different dataset sizes were utilized for experiments, each containing a varying set of skills and environmental settings:
+
+- **8 GB Dataset**: Includes tasks such as sweeping, stacking, opening/closing microwaves, and pick-and-place operations.
+  
+  **Folders**: minsky_folding_table_white_tray, deepthought_toykitchen1, deepthought_toykitchen2
+  
+- **16 GB Dataset**: Extends the 8 GB dataset with additional tasks like opening and closing drawers.
+  
+  **Folders**: minsky_folding_table_white_tray, deepthought_toykitchen1, deepthought_toykitchen2, deepthought_robot_desk, deepthought_folding_table
+  
+- **32 GB Dataset**: Further extends the 16 GB dataset by adding a pushing task.
+  
+  **Folders**: Includes all folders from the 16 GB dataset plus datacol2_toysink2, datacol2_toykitchen7_white_tray, and datacol2_toykitchen7.
+
+### Model Architectures
+
+Two different encoding model backbones were employed in our experiments:
+
+- **resnetv1-18**
+- **resnetv1-34**
+
+### Goal-conditioned Behavioral Cloning (GCBC)
+
+A total of six experiments were conducted, involving various combinations of dataset sizes and model architectures. The results, particularly those related to Mean Squared Error (MSE) on the validation dataset, are as follows:
+
+![Validation MSE](imgs/val_mse_all.png)
+
+#### Key Takeaways:
+
+- Increasing the dataset size enhances the model's ability to generalize, thereby reducing the total error on validation data.
+  
+- With smaller datasets, the model architecture doesn't significantly impact the error. However, with the 32 GB dataset, the larger model (resnetv1-34) already slightly outperforms its smaller counterpart.
+
+For a more detailed breakdown of the MSE error plots, you can visit our [Weights & Biases dashboard](https://api.wandb.ai/links/4ku/68se6a6c).
+
+#### MSE Results Summary Table:
+
+| Configuration           | Best MSE on Validation Dataset |
+|-------------------------|--------------------------------|
+| Random Policy           | 8.758                          |
+| resnetv1_18 + 8 GB      | 7.697                          |
+| resnetv1_34 + 8 GB      | 7.776                          |
+| resnetv1_18 + 16 GB     | 6.911                          |
+| resnetv1_34 + 16 GB     | 6.698                          |
+| resnetv1_18 + 32 GB     | 5.863                          |
+| resnetv1_34 + 32 GB     | 5.779                          |
+| resnetv1_34 + Full Data | 4.194                          |
+
+## Language-conditioned Behavioral Cloning (LCBC)
+
+In the 32 GB dataset, a total of 7,978 trajectories exist, of which 6,518 are accompanied by language prompts. These language-annotated trajectories serve as the focus for experiments involving Language-conditioned Behavioral Cloning.
+
+**Statistics:**
+
+- **Total Trajectories**: 7,978
+- **Trajectories with Language Prompts**: 6,518
+
+Results and analyses for LCBC experiments are currently underway and will be updated shortly.

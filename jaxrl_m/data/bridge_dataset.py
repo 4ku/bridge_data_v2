@@ -273,7 +273,6 @@ class BridgeDataset:
         if tf.size(prompt[0]) > 0:
             length_of_actions = tf.shape(parsed_tensors["actions"])[0]
             prompt = self.text_encoder(prompt)
-            prompt = tf.stop_gradient(self.text_encoder(prompt))
             prompts = tf.repeat(prompt, repeats=length_of_actions, axis=0)
         else:
             prompts = tf.constant([])
