@@ -4,7 +4,7 @@ from ml_collections import ConfigDict
 def get_config(config_string):
     base_real_config = dict(
         batch_size=128,
-        num_steps=15_000,
+        num_steps=50_000,
         log_interval=100,
         eval_interval=500,
         save_interval=1000,
@@ -101,7 +101,7 @@ def get_config(config_string):
                     relabel_actions=True,
                     **base_data_config,
                 ),
-                encoder="resnetv1-34-bridge",
+                encoder="resnetv1-18-bridge",
                 encoder_kwargs=dict(
                     pooling_method="avg",
                     add_spatial_coordinates=True,
@@ -116,6 +116,40 @@ def get_config(config_string):
                 agent_kwargs=dict(
                     network_kwargs=dict(
                         hidden_dim=256,
+                        dropout_rate=0.1,
+                    ),
+                    policy_kwargs=dict(
+                        tanh_squash_distribution=False,
+                        fixed_std=[1, 1, 1, 1, 1, 1, 1],
+                        state_dependent_std=False,
+                    ),
+                    use_proprio=False,
+                    learning_rate=3e-4,
+                    warmup_steps=500,
+                    decay_steps=200_000,
+                ),
+                dataset_kwargs=dict(
+                    goal_relabeling_strategy="uniform",
+                    goal_relabeling_kwargs=dict(reached_proportion=0.0),
+                    relabel_actions=True,
+                    **base_data_config,
+                ),
+                encoder="resnetv1-18-bridge",
+                encoder_kwargs=dict(
+                    pooling_method="avg",
+                    add_spatial_coordinates=True,
+                    act="swish",
+                ),
+                **base_real_config,
+            )
+        ),
+        "glc_bc": ConfigDict(
+            dict(
+                agent="glc_bc",
+                agent_kwargs=dict(
+                    network_kwargs=dict(
+                        hidden_dim=256,
+                        dropout_rate=0.1,
                     ),
                     policy_kwargs=dict(
                         tanh_squash_distribution=False,

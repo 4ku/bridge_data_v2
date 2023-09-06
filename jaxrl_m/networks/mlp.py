@@ -90,9 +90,10 @@ class MLPResNet(nn.Module):
 
 class FilmFullMLP(nn.Module):
     hidden_dim: int
+    dropout_rate: Optional[float] = None 
 
     @nn.compact
-    def __call__(self, feature, context):
+    def __call__(self, feature, context, train: bool = False): 
         f_d, c_d, h_d = feature.shape[-1], context.shape[-1], self.hidden_dim
         film = nn.Dense(
             2 * self.hidden_dim * 3,
@@ -112,7 +113,20 @@ class FilmFullMLP(nn.Module):
         gamma, beta = jnp.split(
             film(context).reshape(context.shape[0], 3, -1), 2, axis=-1
         )
+        
+        # First hidden layer
         out = nn.relu(gamma[:, 0] * linear1(feature) + beta[:, 0])
+        if self.dropout_rate is not None and self.dropout_rate > 0:
+            out = nn.Dropout(rate=self.dropout_rate)(out, deterministic=not train)
+        
+        # Second hidden layer
         out = nn.relu(gamma[:, 1] * linear2(out) + beta[:, 1])
+        if self.dropout_rate is not None and self.dropout_rate > 0:
+            out = nn.Dropout(rate=self.dropout_rate)(out, deterministic=not train)
+        
+        # Third hidden layer
         out = nn.relu(gamma[:, 2] * linear3(out) + beta[:, 2])
+        if self.dropout_rate is not None and self.dropout_rate > 0:
+            out = nn.Dropout(rate=self.dropout_rate)(out, deterministic=not train)
+        
         return out

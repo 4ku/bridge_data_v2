@@ -136,7 +136,7 @@ def main(_):
         rng=construct_rng,
         observations=example_batch["observations"],
         goals=example_batch["goals"],
-        # encoded_prompts=example_batch["prompts"],
+        encoded_prompts=example_batch["prompts"],
         actions=example_batch["actions"],
         encoder_def=encoder_def,
         **FLAGS.config.agent_kwargs,

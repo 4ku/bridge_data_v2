@@ -2,7 +2,8 @@ from functools import partial
 from typing import Any
 import jax
 import jax.numpy as jnp
-from jaxrl_m.common.encoding import EncodingWrapper
+from jaxrl_m.common.encoding import GCEncodingWrapper
+import copy
 
 import numpy as np
 import flax
@@ -17,7 +18,7 @@ from jaxrl_m.networks.actor_critic_nets import LanguagePolicy
 from jaxrl_m.networks.mlp import FilmFullMLP
 
 
-class LCBCAgent(flax.struct.PyTreeNode):
+class GLCBCAgent(flax.struct.PyTreeNode):
     state: JaxRLTrainState
     lr_schedule: Any = nonpytree_field()
 
@@ -27,7 +28,7 @@ class LCBCAgent(flax.struct.PyTreeNode):
             rng, key = jax.random.split(rng)
             dist = self.state.apply_fn(
                 {"params": params},
-                (batch["observations"], batch["prompts"]),
+                ((batch["observations"], batch["goals"]),batch["prompts"]),
                 temperature=1.0,
                 train=True,
                 rngs={"dropout": key},
@@ -62,6 +63,7 @@ class LCBCAgent(flax.struct.PyTreeNode):
     def sample_actions(
         self,
         observations: np.ndarray,
+        goals: np.ndarray,
         prompts: np.ndarray,
         *,
         seed: PRNGKey,
@@ -70,7 +72,7 @@ class LCBCAgent(flax.struct.PyTreeNode):
     ) -> jnp.ndarray:
         dist = self.state.apply_fn(
             {"params": self.state.params},
-            (observations, prompts),
+            ((observations, goals), prompts),
             temperature=temperature,
             name="actor",
         )
@@ -84,7 +86,7 @@ class LCBCAgent(flax.struct.PyTreeNode):
     def get_debug_metrics(self, batch, **kwargs):
         dist = self.state.apply_fn(
             {"params": self.state.params},
-            (batch["observations"], batch["prompts"]),
+            ((batch["observations"], batch["goals"]), batch["prompts"]),
             temperature=1.0,
             name="actor",
         )
@@ -105,8 +107,11 @@ class LCBCAgent(flax.struct.PyTreeNode):
         observations: FrozenDict,
         actions: jnp.ndarray,
         encoded_prompts: FrozenDict,
+        goals: FrozenDict,
         # Model architecture
         encoder_def: nn.Module,
+        shared_goal_encoder: bool = True,
+        early_goal_concat: bool = False,
         use_proprio: bool = False,
         network_kwargs: dict = {
             "hidden_dim": 256,
@@ -122,8 +127,18 @@ class LCBCAgent(flax.struct.PyTreeNode):
         decay_steps: int = 1000_000,
     ):
 
-        image_encoder = EncodingWrapper(
+        if early_goal_concat:
+            # passing None as the goal encoder causes early goal concat
+            goal_encoder_def = None
+        else:
+            if shared_goal_encoder:
+                goal_encoder_def = encoder_def
+            else:
+                goal_encoder_def = copy.deepcopy(encoder_def)
+
+        encoder_def = GCEncodingWrapper(
             encoder=encoder_def,
+            goal_encoder=goal_encoder_def,
             use_proprio=use_proprio,
             stop_gradient=False,
         )
@@ -131,7 +146,7 @@ class LCBCAgent(flax.struct.PyTreeNode):
 
         networks = {
             "actor": LanguagePolicy(
-                image_encoder,
+                encoder_def,
                 film_mlp,
                 action_dim=actions.shape[-1],
                 **policy_kwargs
@@ -150,7 +165,7 @@ class LCBCAgent(flax.struct.PyTreeNode):
         tx = optax.adam(lr_schedule)
 
         rng, init_rng = jax.random.split(rng)
-        params = model_def.init(init_rng, actor=[(observations, encoded_prompts)])["params"]
+        params = model_def.init(init_rng, actor=[((observations, goals), encoded_prompts)])["params"]
 
         rng, create_rng = jax.random.split(rng)
         state = JaxRLTrainState.create(

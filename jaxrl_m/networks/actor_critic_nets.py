@@ -150,10 +150,10 @@ class _LanguagePolicyCore(nn.Module):
 
 class LanguagePolicy(BasePolicy, _LanguagePolicyCore):
     @nn.compact
-    def __call__(self, observations_and_prompts: Tuple[Dict[str, jnp.ndarray],  jnp.ndarray], temperature: float = 1.0) -> distrax.Distribution:
+    def __call__(self, observations_and_prompts: Tuple[Dict[str, jnp.ndarray],  jnp.ndarray], temperature: float = 1.0, train: bool = False) -> distrax.Distribution:
         observations, encoded_prompts = observations_and_prompts
         image_encoding = self.image_encoder(observations)
-        outputs = self.film_mlp(image_encoding, encoded_prompts)
+        outputs = self.film_mlp(image_encoding, encoded_prompts, train=train)
 
         return self.generate_distribution(outputs, temperature)
 
