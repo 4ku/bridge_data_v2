@@ -4,8 +4,8 @@ import flax.linen as nn
 
 from typing import Optional
 from jaxrl_m.common.common import default_init
-from jaxrl_m.networks.mlp import MLP
 from functools import partial
+from typing import Dict, Optional, Tuple
 
 
 class ValueCritic(nn.Module):
@@ -106,24 +106,21 @@ def ensemblize(cls, num_qs, out_axes=0):
     )
 
 
-class Policy(nn.Module):
-    encoder: nn.Module
-    network: nn.Module
+class _BasePolicyCore(nn.Module):
     action_dim: int
-    init_final: Optional[float] = None
+
+class _BasePolicyDefaults(nn.Module):
     log_std_min: Optional[float] = -20
     log_std_max: Optional[float] = 2
     tanh_squash_distribution: bool = False
     fixed_std: Optional[jnp.ndarray] = None
     state_dependent_std: bool = True
 
-    @nn.compact
-    def __call__(
-        self, observations: jnp.ndarray, temperature: float = 1.0, train: bool = False
-    ) -> distrax.Distribution:
-        outputs = self.network(self.encoder(observations), train=train)
-
+class BasePolicy(_BasePolicyDefaults, _BasePolicyCore):
+    
+    def generate_distribution(self, outputs, temperature):
         means = nn.Dense(self.action_dim, kernel_init=default_init())(outputs)
+
         if self.fixed_std is None:
             if self.state_dependent_std:
                 log_stds = nn.Dense(self.action_dim, kernel_init=default_init())(
@@ -139,15 +136,37 @@ class Policy(nn.Module):
         log_stds = jnp.clip(log_stds, self.log_std_min, self.log_std_max) / temperature
 
         if self.tanh_squash_distribution:
-            distribution = TanhMultivariateNormalDiag(
+            return TanhMultivariateNormalDiag(
                 loc=means, scale_diag=jnp.exp(log_stds)
             )
         else:
-            distribution = distrax.MultivariateNormalDiag(
+            return distrax.MultivariateNormalDiag(
                 loc=means, scale_diag=jnp.exp(log_stds)
             )
 
-        return distribution
+class _LanguagePolicyCore(nn.Module):
+    image_encoder: nn.Module
+    film_mlp: nn.Module
+
+class LanguagePolicy(BasePolicy, _LanguagePolicyCore):
+    @nn.compact
+    def __call__(self, observations_and_prompts: Tuple[Dict[str, jnp.ndarray],  jnp.ndarray], temperature: float = 1.0) -> distrax.Distribution:
+        observations, encoded_prompts = observations_and_prompts
+        image_encoding = self.image_encoder(observations)
+        outputs = self.film_mlp(image_encoding, encoded_prompts)
+
+        return self.generate_distribution(outputs, temperature)
+
+class _PolicyCore(nn.Module):
+    encoder: nn.Module
+    network: nn.Module
+
+class Policy(BasePolicy, _PolicyCore):
+    @nn.compact
+    def __call__(self, observations: jnp.ndarray, temperature: float = 1.0, train: bool = False) -> distrax.Distribution:
+        outputs = self.network(self.encoder(observations), train=train)
+
+        return self.generate_distribution(outputs, temperature)
 
 
 class TanhMultivariateNormalDiag(distrax.Transformed):

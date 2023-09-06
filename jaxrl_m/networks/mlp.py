@@ -1,8 +1,24 @@
+import math
+import jax
 from typing import Callable, Optional, Sequence
 import flax.linen as nn
 import jax.numpy as jnp
 from jaxrl_m.common.common import default_init
 
+
+def pytorch_init(fan_in: float):
+    """
+    Default init for PyTorch Linear layer weights and biases:
+    https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    """
+    bound = math.sqrt(1 / fan_in)
+
+    def _init(key, shape, dtype):
+        return jax.random.uniform(
+            key, shape=shape, minval=-bound, maxval=bound, dtype=dtype
+        )
+
+    return _init
 
 class MLP(nn.Module):
     hidden_dims: Sequence[int]
@@ -70,3 +86,33 @@ class MLPResNet(nn.Module):
         x = self.activations(x)
         x = nn.Dense(self.out_dim, kernel_init=default_init())(x)
         return x
+
+
+class FilmFullMLP(nn.Module):
+    hidden_dim: int
+
+    @nn.compact
+    def __call__(self, feature, context):
+        f_d, c_d, h_d = feature.shape[-1], context.shape[-1], self.hidden_dim
+        film = nn.Dense(
+            2 * self.hidden_dim * 3,
+            kernel_init=pytorch_init(c_d),
+            bias_init=pytorch_init(c_d),
+        )
+        linear1 = nn.Dense(
+            self.hidden_dim, kernel_init=pytorch_init(f_d), bias_init=pytorch_init(f_d)
+        )
+        linear2 = nn.Dense(
+            self.hidden_dim, kernel_init=pytorch_init(h_d), bias_init=pytorch_init(h_d)
+        )
+        linear3 = nn.Dense(
+            self.hidden_dim, kernel_init=pytorch_init(h_d), bias_init=pytorch_init(h_d)
+        )
+
+        gamma, beta = jnp.split(
+            film(context).reshape(context.shape[0], 3, -1), 2, axis=-1
+        )
+        out = nn.relu(gamma[:, 0] * linear1(feature) + beta[:, 0])
+        out = nn.relu(gamma[:, 1] * linear2(out) + beta[:, 1])
+        out = nn.relu(gamma[:, 2] * linear3(out) + beta[:, 2])
+        return out

@@ -136,6 +136,7 @@ def main(_):
         rng=construct_rng,
         observations=example_batch["observations"],
         goals=example_batch["goals"],
+        # encoded_prompts=example_batch["prompts"],
         actions=example_batch["actions"],
         encoder_def=encoder_def,
         **FLAGS.config.agent_kwargs,
@@ -156,6 +157,8 @@ def main(_):
         except Exception as e:
             logging.warning(e)
             logging.warning("Corrupted record encountered. Skipping.")
+            timer.tock("dataset")
+            timer.tock("total")
             continue
         timer.tock("dataset")
 
@@ -201,7 +204,6 @@ def main(_):
         if (i + 1) % FLAGS.config.log_interval == 0:
             update_info = jax.device_get(update_info)
             wandb_logger.log({"training": update_info}, step=i)
-
             wandb_logger.log({"timer": timer.get_average_times()}, step=i)
 
 

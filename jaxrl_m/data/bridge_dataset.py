@@ -13,6 +13,7 @@ import numpy as np
 from absl import logging
 from flax.core import FrozenDict
 import tensorflow as tf
+import tensorflow_hub as hub
 from jaxrl_m.data.tf_augmentations import augment
 from jaxrl_m.data.tf_goal_relabeling import GOAL_RELABELING_FUNCTIONS
 
@@ -164,6 +165,8 @@ class BridgeDataset:
         self.act_pred_horizon = act_pred_horizon
         self.obs_horizon = obs_horizon
 
+        self.text_encoder = hub.load("https://tfhub.dev/google/universal-sentence-encoder/4")
+
         # construct a dataset for each sub-list of paths
         datasets = []
         for sub_data_paths in data_paths:
@@ -220,6 +223,8 @@ class BridgeDataset:
         # yields trajectories
         dataset = dataset.map(self._decode_example, num_parallel_calls=tf.data.AUTOTUNE)
 
+        dataset = dataset.filter(lambda x: tf.size(x['prompts']) > 0)
+
         # yields trajectories
         dataset = dataset.map(
             self._process_actions, num_parallel_calls=tf.data.AUTOTUNE
@@ -249,6 +254,7 @@ class BridgeDataset:
         "actions": tf.float32,
         "terminals": tf.bool,
         "truncates": tf.bool,
+        "language": tf.string,
     }
 
     def _decode_example(self, example_proto):
@@ -262,6 +268,15 @@ class BridgeDataset:
             key: tf.io.parse_tensor(parsed_features[key], dtype)
             for key, dtype in self.PROTO_TYPE_SPEC.items()
         }
+        
+        prompt = parsed_tensors["language"][:1]
+        if tf.size(prompt[0]) > 0:
+            length_of_actions = tf.shape(parsed_tensors["actions"])[0]
+            prompt = self.text_encoder(prompt)
+            prompt = tf.stop_gradient(self.text_encoder(prompt))
+            prompts = tf.repeat(prompt, repeats=length_of_actions, axis=0)
+        else:
+            prompts = tf.constant([])
 
         # restructure the dictionary into the downstream format
         return {
@@ -276,6 +291,7 @@ class BridgeDataset:
             "actions": parsed_tensors["actions"],
             "terminals": parsed_tensors["terminals"],
             "truncates": parsed_tensors["truncates"],
+            "prompts": prompts,
         }
 
     def _process_actions(self, traj):

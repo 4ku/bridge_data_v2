@@ -3,11 +3,11 @@ from ml_collections import ConfigDict
 
 def get_config(config_string):
     base_real_config = dict(
-        batch_size=256,
-        num_steps=50_000,
+        batch_size=128,
+        num_steps=15_000,
         log_interval=100,
         eval_interval=500,
-        save_interval=500,
+        save_interval=1000,
         save_dir="data/bridge_results",
         data_path="data/bridge_tfrecord",
         resume_path=None,
@@ -92,8 +92,40 @@ def get_config(config_string):
                     shared_goal_encoder=True,
                     use_proprio=False,
                     learning_rate=3e-4,
-                    warmup_steps=2000,
-                    decay_steps=int(2e6),
+                    warmup_steps=500,
+                    decay_steps=200_000,
+                ),
+                dataset_kwargs=dict(
+                    goal_relabeling_strategy="uniform",
+                    goal_relabeling_kwargs=dict(reached_proportion=0.0),
+                    relabel_actions=True,
+                    **base_data_config,
+                ),
+                encoder="resnetv1-34-bridge",
+                encoder_kwargs=dict(
+                    pooling_method="avg",
+                    add_spatial_coordinates=True,
+                    act="swish",
+                ),
+                **base_real_config,
+            )
+        ),
+        "lc_bc": ConfigDict(
+            dict(
+                agent="lc_bc",
+                agent_kwargs=dict(
+                    network_kwargs=dict(
+                        hidden_dim=256,
+                    ),
+                    policy_kwargs=dict(
+                        tanh_squash_distribution=False,
+                        fixed_std=[1, 1, 1, 1, 1, 1, 1],
+                        state_dependent_std=False,
+                    ),
+                    use_proprio=False,
+                    learning_rate=3e-4,
+                    warmup_steps=500,
+                    decay_steps=200_000,
                 ),
                 dataset_kwargs=dict(
                     goal_relabeling_strategy="uniform",
