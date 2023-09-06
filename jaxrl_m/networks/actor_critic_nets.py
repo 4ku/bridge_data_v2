@@ -5,7 +5,7 @@ import flax.linen as nn
 from typing import Optional
 from jaxrl_m.common.common import default_init
 from functools import partial
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 
 class ValueCritic(nn.Module):
@@ -106,19 +106,29 @@ def ensemblize(cls, num_qs, out_axes=0):
     )
 
 
-class _BasePolicyCore(nn.Module):
+class Policy(nn.Module):
+    image_encoder: nn.Module
+    network: nn.Module
     action_dim: int
 
-class _BasePolicyDefaults(nn.Module):
+    language_conditioned: bool = False
     log_std_min: Optional[float] = -20
     log_std_max: Optional[float] = 2
     tanh_squash_distribution: bool = False
     fixed_std: Optional[jnp.ndarray] = None
     state_dependent_std: bool = True
 
-class BasePolicy(_BasePolicyDefaults, _BasePolicyCore):
-    
-    def generate_distribution(self, outputs, temperature):
+    @nn.compact
+    def __call__(self, inputs, temperature: float = 1.0, train: bool = False) -> distrax.Distribution:
+
+        if self.language_conditioned:
+            observations, encoded_prompts = inputs
+            image_encoding = self.image_encoder(observations)
+            outputs = self.network(image_encoding, encoded_prompts, train=train)
+        else:
+            image_encoding = self.image_encoder(inputs)
+            outputs = self.network(image_encoding, train=train)
+
         means = nn.Dense(self.action_dim, kernel_init=default_init())(outputs)
 
         if self.fixed_std is None:
@@ -143,31 +153,6 @@ class BasePolicy(_BasePolicyDefaults, _BasePolicyCore):
             return distrax.MultivariateNormalDiag(
                 loc=means, scale_diag=jnp.exp(log_stds)
             )
-
-class _LanguagePolicyCore(nn.Module):
-    image_encoder: nn.Module
-    film_mlp: nn.Module
-
-class LanguagePolicy(BasePolicy, _LanguagePolicyCore):
-    @nn.compact
-    def __call__(self, observations_and_prompts: Tuple[Dict[str, jnp.ndarray],  jnp.ndarray], temperature: float = 1.0, train: bool = False) -> distrax.Distribution:
-        observations, encoded_prompts = observations_and_prompts
-        image_encoding = self.image_encoder(observations)
-        outputs = self.film_mlp(image_encoding, encoded_prompts, train=train)
-
-        return self.generate_distribution(outputs, temperature)
-
-class _PolicyCore(nn.Module):
-    encoder: nn.Module
-    network: nn.Module
-
-class Policy(BasePolicy, _PolicyCore):
-    @nn.compact
-    def __call__(self, observations: jnp.ndarray, temperature: float = 1.0, train: bool = False) -> distrax.Distribution:
-        outputs = self.network(self.encoder(observations), train=train)
-
-        return self.generate_distribution(outputs, temperature)
-
 
 class TanhMultivariateNormalDiag(distrax.Transformed):
     def __init__(

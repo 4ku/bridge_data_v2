@@ -1,24 +1,41 @@
+import copy
 from functools import partial
 from typing import Any
 import jax
 import jax.numpy as jnp
-from jaxrl_m.common.encoding import EncodingWrapper
-import numpy as np
+from jaxrl_m.common.encoding import EncodingWrapper, GCEncodingWrapper
 import flax
 import flax.linen as nn
 import optax
 
-from flax.core import FrozenDict
 from jaxrl_m.common.typing import Batch
 from jaxrl_m.common.typing import PRNGKey
 from jaxrl_m.common.common import JaxRLTrainState, ModuleDict, nonpytree_field
 from jaxrl_m.networks.actor_critic_nets import Policy
-from jaxrl_m.networks.mlp import MLP
+from jaxrl_m.networks.mlp import MLP, FilmFullMLP
+
+
+@partial(jax.jit, static_argnums=(1, 2))
+def get_inputs(batch: Batch, goal_conditioned: bool, language_conditioned: bool):
+    if goal_conditioned:
+        observations = (batch["observations"], batch["goals"])
+    else:
+        observations = batch["observations"]
+    if language_conditioned:
+        return (observations, batch["prompts"])
+    else:
+        return observations
 
 
 class BCAgent(flax.struct.PyTreeNode):
     state: JaxRLTrainState
+    goal_conditioned: bool = nonpytree_field()
+    language_conditioned: bool = nonpytree_field()
     lr_schedule: Any = nonpytree_field()
+
+    @jax.jit
+    def _get_inputs(self, batch: Batch):
+        return get_inputs(batch, self.goal_conditioned, self.language_conditioned)
 
     @partial(jax.jit, static_argnames="pmap_axis")
     def update(self, batch: Batch, pmap_axis: str = None):
@@ -26,7 +43,7 @@ class BCAgent(flax.struct.PyTreeNode):
             rng, key = jax.random.split(rng)
             dist = self.state.apply_fn(
                 {"params": params},
-                batch["observations"],
+                self._get_inputs(batch),
                 temperature=1.0,
                 train=True,
                 rngs={"dropout": key},
@@ -41,8 +58,8 @@ class BCAgent(flax.struct.PyTreeNode):
             return actor_loss, {
                 "actor_loss": actor_loss,
                 "mse": mse.mean(),
-                "log_probs": log_probs,
-                "pi_actions": pi_actions,
+                "log_probs": log_probs.mean(),
+                "pi_actions": pi_actions.mean(),
                 "mean_std": actor_std.mean(),
                 "max_std": actor_std.max(),
             }
@@ -59,16 +76,11 @@ class BCAgent(flax.struct.PyTreeNode):
 
     @partial(jax.jit, static_argnames="argmax")
     def sample_actions(
-        self,
-        observations: np.ndarray,
-        *,
-        seed: PRNGKey,
-        temperature: float = 1.0,
-        argmax=False
+        self, batch: Batch, *, seed: PRNGKey, temperature: float = 1.0, argmax=False
     ) -> jnp.ndarray:
         dist = self.state.apply_fn(
             {"params": self.state.params},
-            observations,
+            self._get_inputs(batch),
             temperature=temperature,
             name="actor",
         )
@@ -82,7 +94,7 @@ class BCAgent(flax.struct.PyTreeNode):
     def get_debug_metrics(self, batch, **kwargs):
         dist = self.state.apply_fn(
             {"params": self.state.params},
-            batch["observations"],
+            self._get_inputs(batch),
             temperature=1.0,
             name="actor",
         )
@@ -100,10 +112,13 @@ class BCAgent(flax.struct.PyTreeNode):
     def create(
         cls,
         rng: PRNGKey,
-        observations: FrozenDict,
-        actions: jnp.ndarray,
+        example_batch: Batch,
         # Model architecture
         encoder_def: nn.Module,
+        goal_conditioned: bool = False,
+        language_conditioned: bool = False,
+        shared_goal_encoder: bool = True,
+        early_goal_concat: bool = False,
         use_proprio: bool = False,
         network_kwargs: dict = {
             "hidden_dims": [256, 256],
@@ -118,18 +133,41 @@ class BCAgent(flax.struct.PyTreeNode):
         warmup_steps: int = 1000,
         decay_steps: int = 1000000,
     ):
-        encoder_def = EncodingWrapper(
-            encoder=encoder_def,
-            use_proprio=use_proprio,
-            stop_gradient=False,
-        )
+        if goal_conditioned:
+            if early_goal_concat:
+                # passing None as the goal encoder causes early goal concat
+                goal_encoder_def = None
+            else:
+                if shared_goal_encoder:
+                    goal_encoder_def = encoder_def
+                else:
+                    goal_encoder_def = copy.deepcopy(encoder_def)
 
-        network_kwargs["activate_final"] = True
+            encoder_def = GCEncodingWrapper(
+                encoder=encoder_def,
+                goal_encoder=goal_encoder_def,
+                use_proprio=use_proprio,
+                stop_gradient=False,
+            )
+        else:
+            encoder_def = EncodingWrapper(
+                encoder=encoder_def,
+                use_proprio=use_proprio,
+                stop_gradient=False,
+            )
+
+        if language_conditioned:
+            network = FilmFullMLP(**network_kwargs)
+        else:
+            network_kwargs["activate_final"] = True
+            network = MLP(**network_kwargs)
+
         networks = {
             "actor": Policy(
                 encoder_def,
-                MLP(**network_kwargs),
-                action_dim=actions.shape[-1],
+                network,
+                action_dim=example_batch["actions"].shape[-1],
+                language_conditioned=language_conditioned,
                 **policy_kwargs
             )
         }
@@ -146,7 +184,8 @@ class BCAgent(flax.struct.PyTreeNode):
         tx = optax.adam(lr_schedule)
 
         rng, init_rng = jax.random.split(rng)
-        params = model_def.init(init_rng, actor=observations)["params"]
+        inputs = get_inputs(example_batch, goal_conditioned, language_conditioned)
+        params = model_def.init(init_rng, actor=[inputs])["params"]
 
         rng, create_rng = jax.random.split(rng)
         state = JaxRLTrainState.create(
@@ -157,4 +196,4 @@ class BCAgent(flax.struct.PyTreeNode):
             rng=create_rng,
         )
 
-        return cls(state, lr_schedule)
+        return cls(state, goal_conditioned, language_conditioned, lr_schedule)

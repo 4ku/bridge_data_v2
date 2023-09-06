@@ -134,10 +134,7 @@ def main(_):
     rng, construct_rng = jax.random.split(rng)
     agent = agents[FLAGS.config.agent].create(
         rng=construct_rng,
-        observations=example_batch["observations"],
-        goals=example_batch["goals"],
-        encoded_prompts=example_batch["prompts"],
-        actions=example_batch["actions"],
+        example_batch=example_batch,
         encoder_def=encoder_def,
         **FLAGS.config.agent_kwargs,
     )
