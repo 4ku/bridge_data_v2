@@ -130,3 +130,25 @@ class FilmFullMLP(nn.Module):
             out = nn.Dropout(rate=self.dropout_rate)(out, deterministic=not train)
         
         return out
+
+
+# Different MLP architectures for RND
+class ConcatFirstMLP(nn.Module):
+    hidden_dim: int
+    dropout_rate: Optional[float] = None 
+
+    @nn.compact
+    def __call__(self, feature, context, train: bool = False):
+        f_d, c_d, h_d = feature.shape[-1], context.shape[-1], self.hidden_dim
+        network = nn.Sequential([
+            nn.Dense(self.hidden_dim, kernel_init=pytorch_init(f_d + c_d), bias_init=pytorch_init(f_d + c_d)),
+            nn.relu,
+            nn.Dense(self.hidden_dim, kernel_init=pytorch_init(h_d), bias_init=pytorch_init(h_d)),
+            nn.relu,
+            nn.Dense(self.hidden_dim, kernel_init=pytorch_init(h_d), bias_init=pytorch_init(h_d)),
+        ])
+
+        out = network(
+            jnp.hstack([feature, context])
+        )
+        return out

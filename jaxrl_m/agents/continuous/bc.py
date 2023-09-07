@@ -12,7 +12,7 @@ from jaxrl_m.common.typing import Batch
 from jaxrl_m.common.typing import PRNGKey
 from jaxrl_m.common.common import JaxRLTrainState, ModuleDict, nonpytree_field
 from jaxrl_m.networks.actor_critic_nets import Policy
-from jaxrl_m.networks.mlp import MLP, FilmFullMLP
+from jaxrl_m.networks.mlp import MLP, FilmFullMLP, ConcatFirstMLP
 
 
 @partial(jax.jit, static_argnums=(1, 2))
@@ -157,7 +157,8 @@ class BCAgent(flax.struct.PyTreeNode):
             )
 
         if language_conditioned:
-            network = FilmFullMLP(**network_kwargs)
+            # network = FilmFullMLP(**network_kwargs)
+            network = ConcatFirstMLP(**network_kwargs)
         else:
             network_kwargs["activate_final"] = True
             network = MLP(**network_kwargs)
