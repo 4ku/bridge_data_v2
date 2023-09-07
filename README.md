@@ -91,13 +91,42 @@ For a more detailed breakdown of the MSE error plots, you can visit our [Weights
 | resnetv1_34 + 32 GB     | 5.779                          |
 | resnetv1_34 + Full Data | 4.194                          |
 
-## Language-conditioned Behavioral Cloning (LCBC)
+### Language-conditioned Behavioral Cloning (LCBC)
 
 In the 32 GB dataset, a total of 7,978 trajectories exist, of which 6,518 are accompanied by language prompts. These language-annotated trajectories serve as the focus for experiments involving Language-conditioned Behavioral Cloning.
 
-**Statistics:**
+#### Dataset Overview:
+- **Trajectories Paired with Language Prompts**: 6,518
+- **Total Trajectories Available**: 7,978
 
-- **Total Trajectories**: 7,978
-- **Trajectories with Language Prompts**: 6,518
+#### LCBC Implementation Details:
+The Language-conditioned Behavioral Cloning was conceptualized based on the description presented in the BridgeData V2 paper:
 
-Results and analyses for LCBC experiments are currently underway and will be updated shortly.
+```
+The natural language instruction is first encoded using the MUSE sentence embedding, then the image observation is encoded using a ResNet-34 with FiLM conditioning on the language encoding.
+```
+
+The pretrained universal sentence encoder was sourced from [this location](https://tfhub.dev/google/universal-sentence-encoder/4).
+
+Notably, experiments were also conducted without the use of FiLM. Instead of FiLM conditioning, the language and observation encodings were simply concatenated.
+
+#### Validation Results:
+The MSE plots for validation data are visualized in the provided image below, and they are also available on [Weights & Biases dashboard](https://wandb.ai/4ku/jaxrl_m_bridgedata/reports/validation-mse-23-09-07-10-39-37), juxtaposed with the results from goal-conditioned BC. 
+  
+![](imgs/LCBC.png)  
+
+#### Key Takeaways:
+- LCBC showcases its ability to learn effectively.
+- Simple concatenation outperforms FiLM concatenation in our setting.
+- Although experiments were performed combining both goal and language conditions in BC, there wasn't a noticeable improvement over the traditional goal-conditioned BC. This might be attributed to the fact that the pretrained universal sentence encoder is quite general and may not offer significant advantages in goal conditioning.
+
+#### MSE Results Summary Table:
+
+| Configuration                    | Best MSE on Validation Dataset |
+|----------------------------------|--------------------------------|
+| Language + FiLM                  | 7.578                          |
+| Language + concatMLP             | 7.404                     |
+| Goal & Language + FiLM           | 6.07                      |
+| Goal & Language + concatMLP      | 5.681                     |
+| Traditional Goal-conditioned BC  | 5.54                      |
+
