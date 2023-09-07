@@ -124,6 +124,7 @@ The MSE plots for validation data are visualized in the provided image below, an
 
 | Configuration                    | Best MSE on Validation Dataset |
 |----------------------------------|--------------------------------|
+| Random Policy           | 8.758                          |
 | Language + FiLM                  | 7.578                          |
 | Language + concatMLP             | 7.404                     |
 | Goal & Language + FiLM           | 6.07                      |
