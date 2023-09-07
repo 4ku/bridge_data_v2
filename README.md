@@ -111,7 +111,7 @@ The pretrained universal sentence encoder was sourced from [this location](https
 Notably, experiments were also conducted without the use of FiLM. Instead of FiLM conditioning, the language and observation encodings were simply concatenated.
 
 #### Validation Results:
-The MSE plots for validation data are visualized in the provided image below, and they are also available on [Weights & Biases dashboard](https://wandb.ai/4ku/jaxrl_m_bridgedata/reports/validation-mse-23-09-07-10-39-37), juxtaposed with the results from goal-conditioned BC. 
+The MSE plots for validation data are visualized in the provided image below, and they are also available on [Weights & Biases dashboard](https://api.wandb.ai/links/4ku/lhpr2gah), juxtaposed with the results from goal-conditioned BC. 
   
 ![](imgs/LCBC.png)  
 
